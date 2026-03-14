@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Buat Room — Nitip Tuban</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--teal:#2ABFB3;--teal-d:#0a7a72;--teal-p:#E0F7F5;--ink:#0f1923;--muted:#6b7a8a;--border:#e2e8f0;--bg:#f0fafa}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:20px}
+.logo{text-align:center}
+.logo h1{font-size:22px;font-weight:800;color:var(--teal-d)}
+.logo p{font-size:13px;color:var(--muted);margin-top:2px}
+.card{background:#fff;border-radius:20px;box-shadow:0 4px 24px rgba(0,0,0,.08);width:100%;max-width:420px;padding:28px}
+.card h2{font-size:17px;font-weight:800;color:var(--ink);margin-bottom:4px}
+.card .sub{font-size:13px;color:var(--muted);margin-bottom:20px}
+label{display:block;font-size:12px;font-weight:700;color:var(--ink);margin-bottom:6px}
+input{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;color:var(--ink);outline:none;transition:border-color .15s}
+input:focus{border-color:var(--teal)}
+.btn{width:100%;margin-top:16px;padding:13px;background:var(--teal-d);color:#fff;border:none;border-radius:12px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:background .15s}
+.btn:hover{background:var(--teal)}.btn:disabled{background:#b2d8d6;cursor:not-allowed}
+.result{margin-top:20px;padding:18px;background:var(--teal-p);border:1px solid #a7f3d0;border-radius:14px;display:none}
+.result.on{display:block}
+.rtitle{font-size:13px;font-weight:700;color:var(--teal-d);margin-bottom:10px}
+.link-box{display:flex;gap:8px;align-items:stretch}
+.link-txt{flex:1;padding:9px 12px;background:#fff;border:1px solid #a7f3d0;border-radius:8px;font-size:11px;color:var(--ink);word-break:break-all;font-family:monospace;line-height:1.4}
+.copy-btn{padding:9px 14px;background:var(--teal-d);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s;flex-shrink:0}
+.copy-btn:hover{background:var(--teal)}.copy-btn.ok{background:#22c55e}
+.expire-note{font-size:11px;color:#d97706;margin-top:8px;display:flex;align-items:center;gap:4px}
+.action-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.abtn{padding:11px;border-radius:10px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:center;border:none;transition:background .15s;text-decoration:none;display:block}
+.abtn-outline{background:#fff;border:1.5px solid var(--teal-d);color:var(--teal-d)}.abtn-outline:hover{background:var(--teal-p)}
+.abtn-wa{background:#25D366;color:#fff}.abtn-wa:hover{background:#128C7E}
+
+.section-title{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
+.rooms-wrap{width:100%;max-width:420px}
+.room-item{background:#fff;border-radius:12px;padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 6px rgba(0,0,0,.06);cursor:pointer;transition:box-shadow .15s,background .15s}
+.room-item:hover{box-shadow:0 3px 14px rgba(0,0,0,.1);background:#fafffe}
+.room-label{font-size:14px;font-weight:700;color:var(--ink)}
+.room-meta{font-size:11px;color:var(--muted);margin-top:2px;display:flex;gap:8px}
+.room-exp{color:#d97706}
+.room-arr{color:var(--muted);font-size:20px;font-weight:300}
+.empty{text-align:center;color:var(--muted);font-size:13px;padding:20px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{display:inline-block;animation:spin 1s linear infinite}
+</style>
+</head>
+<body>
+<div class="logo">
+  <h1>🛵 Nitip Tuban</h1>
+  <p>Jasa Titip & Antar Tuban</p>
+</div>
+
+<div class="card">
+  <h2>Buat Room Chat</h2>
+  <div class="sub">Isi label order → dapat link → share ke user & kurir via WA.</div>
+  <label>Label order</label>
+  <input id="label" placeholder="Contoh: Nana – Kurir Makan" maxlength="80"
+    onkeydown="if(event.key==='Enter')buat()">
+  <button class="btn" id="btn" onclick="buat()">Buat Room & Dapat Link →</button>
+
+  <div class="result" id="result">
+    <div class="rtitle">✅ Room berhasil dibuat!</div>
+    <div class="link-box">
+      <div class="link-txt" id="link-txt">—</div>
+      <button class="copy-btn" id="copy-btn" onclick="copyLink()">Salin</button>
+    </div>
+    <div class="expire-note">⏳ Link otomatis kadaluarsa dalam 24 jam</div>
+    <div class="action-btns">
+      <button class="abtn abtn-outline" onclick="bukaRoom()">Buka Room →</button>
+      <a class="abtn abtn-wa" id="wa-btn" href="#" target="_blank">📤 Share WA</a>
+    </div>
+  </div>
+</div>
+
+<div class="rooms-wrap">
+  <div class="section-title">Room Aktif</div>
+  <div id="rooms-list"><div class="empty"><span class="spin">⟳</span> Memuat…</div></div>
+</div>
+
+<script>
+const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+let _link = '';
+
+async function buat() {
+  const label = document.getElementById('label').value.trim();
+  if (!label) { document.getElementById('label').focus(); return; }
+  const btn = document.getElementById('btn');
+  btn.disabled = true; btn.textContent = 'Membuat…';
+  const { data, error } = await _sb.from('rooms').insert({ label }).select().single();
+  btn.disabled = false; btn.textContent = 'Buat Room & Dapat Link →';
+  if (error) { alert('Gagal: ' + error.message); return; }
+  _link = location.origin + '/room.html?id=' + data.id;
+  document.getElementById('link-txt').textContent = _link;
+  document.getElementById('result').classList.add('on');
+  const msg = `Halo! Ini link chat order kamu dari *Nitip Tuban* 🛵\n\n📋 *${label}*\n🔗 ${_link}\n\n_Buka link, isi nama kamu, langsung bisa chat._\n⏳ Link aktif 24 jam.`;
+  document.getElementById('wa-btn').href = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  document.getElementById('label').value = '';
+  loadRooms();
+}
+
+function copyLink() {
+  navigator.clipboard.writeText(_link).then(() => {
+    const b = document.getElementById('copy-btn');
+    b.textContent = '✓ Tersalin'; b.classList.add('ok');
+    setTimeout(() => { b.textContent = 'Salin'; b.classList.remove('ok'); }, 2500);
+  });
+}
+function bukaRoom() { if (_link) window.open(_link, '_blank'); }
+
+function timeLeft(exp) {
+  const diff = new Date(exp) - Date.now();
+  if (diff <= 0) return 'Kadaluarsa';
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  return h > 0 ? `${h}j ${m}m lagi` : `${m}m lagi`;
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function loadRooms() {
+  const { data } = await _sb.from('rooms').select('*')
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false }).limit(30);
+  const el = document.getElementById('rooms-list');
+  if (!data?.length) { el.innerHTML = '<div class="empty">Belum ada room aktif.</div>'; return; }
+  el.innerHTML = data.map(r => {
+    const link = location.origin + '/room.html?id=' + r.id;
+    const d = new Date(r.created_at).toLocaleDateString('id-ID', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+    return `<div class="room-item" onclick="window.open('${link}','_blank')">
+      <div>
+        <div class="room-label">${escHtml(r.label)}</div>
+        <div class="room-meta"><span>${d}</span><span class="room-exp">⏳ ${timeLeft(r.expires_at)}</span></div>
+      </div>
+      <span class="room-arr">›</span>
+    </div>`;
+  }).join('');
+}
+loadRooms();
+setInterval(loadRooms, 60000);
+</script>
+</body></html>
