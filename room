@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chat — Nitip Tuban</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --teal:#2ABFB3;--teal-d:#0a7a72;--teal-p:#E0F7F5;
+  --ink:#0f1923;--muted:#6b7a8a;--border:#e2e8f0;--bg:#f0fafa;
+  --amber:#f59e0b;--red:#ef4444;--green:#22c55e;
+}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── MODALS ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
+.overlay.hide{display:none}
+.modal{background:#fff;border-radius:20px;padding:28px;width:100%;max-width:360px;text-align:center}
+.modal-icon{font-size:40px;margin-bottom:12px}
+.modal h2{font-size:18px;font-weight:800;color:var(--ink);margin-bottom:6px}
+.modal p{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px}
+.modal input{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:15px;color:var(--ink);outline:none;text-align:center;margin-bottom:12px;transition:border-color .15s}
+.modal input:focus{border-color:var(--teal)}
+.mbtn{width:100%;padding:12px;border:none;border-radius:12px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;transition:background .15s,transform .1s}
+.mbtn:active{transform:scale(.97)}.mbtn:last-child{margin-bottom:0}
+.mbtn-primary{background:var(--teal-d);color:#fff}.mbtn-primary:hover{background:var(--teal)}
+.mbtn-yes{background:var(--green);color:#fff}.mbtn-yes:hover{background:#16a34a}
+.mbtn-no{background:#f1f5f9;color:var(--muted)}.mbtn-no:hover{background:#e2e8f0}
+
+/* ── HEADER ── */
+.hdr{background:#fff;border-bottom:1px solid var(--border);padding:0 12px;height:52px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.hdr-logo{font-size:13px;font-weight:800;color:var(--teal-d);white-space:nowrap}
+.hdr-label{flex:1;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0 4px}
+.hdr-exp{font-size:11px;color:var(--amber);font-weight:700;white-space:nowrap;flex-shrink:0}
+.hdr-btn{width:32px;height:32px;border:none;background:var(--teal-p);border-radius:50%;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s;position:relative}
+.hdr-btn:hover{background:#c7f2ef}
+.hdr-btn.on{background:#dcfce7}
+.hdr-btn.off{background:#fee2e2}
+.notif-badge{position:absolute;top:-2px;right:-2px;width:8px;height:8px;background:var(--red);border-radius:50%;display:none}
+.notif-badge.on{display:block}
+
+/* ── NOTIF BANNER ── */
+.notif-banner{background:linear-gradient(90deg,#fffbeb,#fef3c7);border-bottom:1px solid #fde68a;padding:7px 14px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:6px;flex-shrink:0;cursor:pointer;transition:opacity .15s}
+.notif-banner:hover{opacity:.85}
+.notif-banner.hide{display:none}
+
+/* ── EXPIRED ── */
+.expired-bar{background:#fef2f2;border-bottom:1px solid #fecaca;padding:8px 14px;text-align:center;font-size:13px;color:#b91c1c;font-weight:700;flex-shrink:0;display:none}
+.expired-bar.on{display:block}
+
+/* ── LIVE LOC BANNER ── */
+.live-bar{background:#f0fdf4;border-bottom:1px solid #a7f3d0;padding:7px 12px;display:none;align-items:center;gap:8px;flex-shrink:0}
+.live-bar.on{display:flex}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#16a34a;animation:blink 1.4s infinite;flex-shrink:0}
+.live-txt{flex:1;font-size:12px;font-weight:700;color:#166534}
+.live-acc{font-size:11px;color:#4ade80}
+.live-stop{padding:4px 12px;background:#fff;border:1px solid #a7f3d0;border-radius:8px;font-size:12px;font-weight:700;color:#166534;cursor:pointer}
+
+/* ── MESSAGES ── */
+.msgs{flex:1;overflow-y:auto;padding:12px 12px 6px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth}
+.date-sep{text-align:center;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px;margin:4px 0}
+.date-sep::before,.date-sep::after{content:'';flex:1;height:1px;background:var(--border)}
+.grp{display:flex;flex-direction:column;gap:2px}
+.grp.me{align-items:flex-end}.grp.other{align-items:flex-start}.grp.sys{align-items:center}
+.sender{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:3px;padding:0 4px}
+.bub{max-width:75%;padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.5;word-break:break-word}
+.me .bub{background:var(--teal-d);color:#fff;border-bottom-right-radius:4px}
+.other .bub{background:#fff;color:var(--ink);border:1px solid var(--border);border-bottom-left-radius:4px}
+.sys .bub{background:#fffbeb;color:#92400e;border:1px solid #fde68a;border-radius:10px;font-size:12px;max-width:88%;text-align:center;padding:6px 14px}
+.ts-row{display:flex;align-items:center;gap:5px;margin-top:2px;padding:0 4px}
+.ts{font-size:10px;color:var(--muted)}
+.read-info{font-size:10px;color:var(--teal);font-style:italic}
+
+/* ── FOTO ── */
+.bub-img{max-width:220px;border-radius:12px;overflow:hidden;cursor:pointer}
+.bub-img img{width:100%;display:block;max-height:200px;object-fit:cover}
+.me .bub-img{border:none}.other .bub-img{border:1px solid var(--border)}
+
+/* ── LOKASI ── */
+.bub-loc{width:220px;border-radius:12px;overflow:hidden;cursor:pointer}
+.me .bub-loc{border:none}.other .bub-loc{border:1px solid var(--border)}
+.loc-map{height:120px;width:100%;pointer-events:none;background:#e8f4f0}
+.loc-footer{padding:6px 10px;background:#fff;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.me .loc-footer{background:rgba(255,255,255,.15);border-top-color:rgba(255,255,255,.2)}
+.loc-name{font-size:11px;font-weight:700;color:var(--ink)}
+.me .loc-name{color:#fff}
+.loc-live{font-size:10px;color:#16a34a;font-weight:700}
+.loc-ts{font-size:10px;color:var(--muted)}
+
+/* ── AUDIO ── */
+.bub-audio{max-width:240px}
+.me .bub-audio audio{filter:invert(1) hue-rotate(180deg)}
+audio{width:100%;border-radius:8px;outline:none}
+.rec-indicator{display:none;align-items:center;gap:8px;padding:8px 12px;background:#fee2e2;border-radius:12px;font-size:13px;color:var(--red);font-weight:700;flex-shrink:0}
+.rec-indicator.on{display:flex}
+.rec-dot{width:10px;height:10px;border-radius:50%;background:var(--red);animation:blink 1s infinite;flex-shrink:0}
+.rec-timer{font-variant-numeric:tabular-nums}
+
+/* ── INPUT ── */
+.inp-area{background:#fff;border-top:1px solid var(--border);padding:8px 10px;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.inp-row{display:flex;align-items:flex-end;gap:8px}
+.inp-actions{display:flex;gap:6px;align-items:flex-end;flex-shrink:0}
+.iact{width:36px;height:36px;border:none;background:var(--teal-p);border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:background .15s,transform .1s;flex-shrink:0}
+.iact:hover{background:#c7f2ef}.iact:active{transform:scale(.92)}
+.iact.active{background:#dcfce7}.iact.rec{background:#fee2e2}
+textarea.inp{flex:1;min-height:36px;max-height:100px;padding:8px 13px;border:1.5px solid var(--border);border-radius:18px;font-family:inherit;font-size:14px;resize:none;outline:none;line-height:1.4;transition:border-color .15s;background:#f8fafc}
+textarea.inp:focus{border-color:var(--teal);background:#fff}
+.send{width:36px;height:36px;background:var(--teal-d);border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,transform .1s;flex-shrink:0}
+.send:hover{background:var(--teal)}.send:active{transform:scale(.92)}
+.send svg{width:15px;height:15px;fill:#fff;margin-left:1px}
+
+/* ── LIGHTBOX ── */
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;display:none;align-items:center;justify-content:center}
+.lightbox.on{display:flex}
+.lightbox img{max-width:95vw;max-height:90dvh;border-radius:10px;object-fit:contain}
+.lb-close{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.2);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer}
+
+.empty-chat{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:8px;text-align:center;font-size:14px}
+.empty-chat .ico{font-size:40px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{display:inline-block;animation:spin 1s linear infinite}
+input[type=file]{display:none}
+</style>
+</head>
+<body>
+
+<!-- MODAL NAMA -->
+<div class="overlay" id="modal-nama">
+  <div class="modal">
+    <div class="modal-icon">👋</div>
+    <h2>Siapa nama kamu?</h2>
+    <p>Nama ini akan muncul di chat agar semua orang tahu siapa yang mengirim pesan.</p>
+    <input id="nama-input" placeholder="Masukkan nama kamu…" maxlength="40"
+      onkeydown="if(event.key==='Enter')simpanNama()">
+    <button class="mbtn mbtn-primary" onclick="simpanNama()">Masuk ke Chat →</button>
+  </div>
+</div>
+
+<!-- MODAL NOTIF -->
+<div class="overlay hide" id="modal-notif">
+  <div class="modal">
+    <div class="modal-icon">🔔</div>
+    <h2>Aktifkan Notifikasi?</h2>
+    <p>Apakah kamu ingin mendapatkan notifikasi saat ada pesan baru tentang proses pengiriman ini?<br><br>Kamu bisa menonaktifkannya kapan saja lewat ikon 🔔 di atas.</p>
+    <button class="mbtn mbtn-yes" onclick="mintaNotif()">Ya, aktifkan notifikasi</button>
+    <button class="mbtn mbtn-no" onclick="tolakNotif()">Tidak sekarang</button>
+  </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox" onclick="tutupLightbox()">
+  <button class="lb-close" onclick="tutupLightbox()">✕</button>
+  <img id="lb-img" src="" alt="">
+</div>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-logo">🛵 Nitip Tuban</div>
+  <div class="hdr-label" id="hdr-label">Memuat…</div>
+  <div class="hdr-exp" id="hdr-exp"></div>
+  <button class="hdr-btn" id="notif-btn" onclick="toggleNotif()" title="Notifikasi">
+    🔔<span class="notif-badge" id="notif-badge"></span>
+  </button>
+</div>
+
+<!-- NOTIF HINT BANNER -->
+<div class="notif-banner" id="notif-banner" onclick="toggleNotif()">
+  🔔 Mohon aktifkan notifikasi untuk memudahkan proses pengiriman
+</div>
+
+<!-- EXPIRED -->
+<div class="expired-bar" id="expired-bar"></div>
+
+<!-- LIVE LOC BANNER -->
+<div class="live-bar" id="live-bar">
+  <span class="live-dot"></span>
+  <span class="live-txt">Membagikan lokasi live…</span>
+  <span class="live-acc" id="live-acc"></span>
+  <button class="live-stop" onclick="stopLiveLoc()">Stop</button>
+</div>
+
+<!-- MESSAGES -->
+<div class="msgs" id="msgs">
+  <div class="empty-chat"><div class="ico">💬</div><div><span class="spin">⟳</span> Memuat…</div></div>
+</div>
+
+<!-- REC INDICATOR -->
+<div class="rec-indicator" id="rec-ind">
+  <span class="rec-dot"></span>
+  <span>Merekam…</span>
+  <span class="rec-timer" id="rec-timer">0:00</span>
+  <button style="margin-left:auto;padding:4px 12px;background:#fff;border:1px solid #fecaca;border-radius:8px;font-size:12px;font-weight:700;color:var(--red);cursor:pointer" onclick="batalRekam()">Batal</button>
+</div>
+
+<!-- INPUT -->
+<div class="inp-area" id="inp-area">
+  <div class="inp-row">
+    <div class="inp-actions">
+      <button class="iact" id="btn-loc" onclick="toggleLiveLoc()" title="Lokasi live">📍</button>
+      <button class="iact" onclick="document.getElementById('file-cam').click()" title="Kamera">📷</button>
+      <button class="iact" onclick="document.getElementById('file-gal').click()" title="Galeri">🖼️</button>
+    </div>
+    <textarea class="inp" id="inp" placeholder="Ketik pesan…" rows="1"
+      onkeydown="onKey(event)" oninput="resize(this)"></textarea>
+    <button class="iact" id="btn-mic" onclick="toggleRekam()" title="Pesan suara">🎤</button>
+    <button class="send" id="btn-send" onclick="kirimAtauKirimSuara()">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </div>
+</div>
+
+<input type="file" id="file-cam" accept="image/*" capture="environment" onchange="kirimFoto(this)">
+<input type="file" id="file-gal" accept="image/*" onchange="kirimFoto(this)">
+
+<script>
+const _sb  = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const _rid = new URLSearchParams(location.search).get('id');
+let _nama = '', _room = null, _msgSub = null, _locSub = null;
+let _liveOn = false, _gpsWatch = null;
+let _notifOk = false, _notifDenied = false;
+let _miniMaps = {}, _liveMapId = null, _liveMarker = null;
+let _lastDate = '';
+let _mediaRec = null, _recChunks = [], _recTimer = null, _recSec = 0;
+let _locMsgId = null; // ID pesan lokasi yang sedang live
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+async function init() {
+  if (!_rid) { showExpired('Link tidak valid.'); return; }
+  const { data: room, error } = await _sb.from('rooms').select('*').eq('id', _rid).single();
+  if (error || !room) { showExpired('Room tidak ditemukan atau sudah kadaluarsa.'); return; }
+  _room = room;
+  if (new Date(room.expires_at) <= new Date()) { showExpired('Room ini sudah kadaluarsa.'); return; }
+
+  document.getElementById('hdr-label').textContent = room.label;
+  updateExpTimer();
+  setInterval(updateExpTimer, 30000);
+
+  const saved = localStorage.getItem('nitip_nama_' + _rid) || localStorage.getItem('nitip_nama');
+  if (saved) { _nama = saved; hideModal('modal-nama'); tampilModalNotif(); }
+}
+
+function showExpired(msg) {
+  const b = document.getElementById('expired-bar');
+  b.textContent = '⛔ ' + msg; b.classList.add('on');
+  document.getElementById('inp-area').style.display = 'none';
+  document.getElementById('msgs').innerHTML = `<div class="empty-chat"><div class="ico">⛔</div><div>${msg}</div></div>`;
+  hideModal('modal-nama');
+  document.getElementById('notif-banner').classList.add('hide');
+}
+
+function updateExpTimer() {
+  if (!_room) return;
+  const diff = new Date(_room.expires_at) - Date.now();
+  if (diff <= 0) { showExpired('Room ini sudah kadaluarsa.'); return; }
+  const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000);
+  document.getElementById('hdr-exp').textContent = h > 0 ? `⏳${h}j${m}m` : `⏳${m}m`;
+}
+
+// ══════════════════════════════════════════
+// NAMA
+// ══════════════════════════════════════════
+function simpanNama() {
+  const v = document.getElementById('nama-input').value.trim();
+  if (!v) { document.getElementById('nama-input').focus(); return; }
+  _nama = v;
+  localStorage.setItem('nitip_nama', v);
+  localStorage.setItem('nitip_nama_' + _rid, v);
+  hideModal('modal-nama');
+  tampilModalNotif();
+}
+
+// ══════════════════════════════════════════
+// NOTIFIKASI
+// ══════════════════════════════════════════
+function tampilModalNotif() {
+  if (Notification.permission === 'granted') {
+    _notifOk = true; updateNotifUI(true); mulaiChat(); return;
+  }
+  if (Notification.permission === 'denied') { mulaiChat(); return; }
+  document.getElementById('modal-notif').classList.remove('hide');
+}
+
+async function mintaNotif() {
+  hideModal('modal-notif');
+  const p = await Notification.requestPermission();
+  _notifOk = p === 'granted';
+  updateNotifUI(_notifOk);
+  mulaiChat();
+}
+
+function tolakNotif() {
+  _notifDenied = true;
+  hideModal('modal-notif');
+  mulaiChat();
+  window.addEventListener('beforeunload', tanyaLagi);
+}
+
+function tanyaLagi(e) {
+  e.preventDefault();
+  e.returnValue = 'Aktifkan notifikasi agar kamu tidak ketinggalan pesan pengiriman?';
+  return e.returnValue;
+}
+
+async function toggleNotif() {
+  if (Notification.permission === 'granted') {
+    // Sudah on — info user bahwa tidak bisa dimatikan lewat web
+    alert('Notifikasi sudah aktif. Untuk menonaktifkan, ubah pengaturan notifikasi di browser kamu.');
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    alert('Notifikasi diblokir. Aktifkan lewat pengaturan browser (klik ikon kunci/info di address bar).');
+    return;
+  }
+  const p = await Notification.requestPermission();
+  _notifOk = p === 'granted';
+  updateNotifUI(_notifOk);
+  if (_notifOk && _notifDenied) window.removeEventListener('beforeunload', tanyaLagi);
+}
+
+function updateNotifUI(on) {
+  const btn = document.getElementById('notif-btn');
+  const badge = document.getElementById('notif-badge');
+  const banner = document.getElementById('notif-banner');
+  btn.textContent = on ? '🔔' : '🔕';
+  btn.classList.toggle('on', on);
+  btn.classList.toggle('off', !on);
+  badge.classList.toggle('on', !on); // badge merah kalau notif off
+  if (on) banner.classList.add('hide');
+  // Tambahkan kembali icon setelah set textContent
+  btn.innerHTML = (on ? '🔔' : '🔕') + '<span class="notif-badge' + (!on ? ' on' : '') + '" id="notif-badge"></span>';
+}
+
+function kirimNotif(judul, isi) {
+  if (!_notifOk || document.visibilityState === 'visible') return;
+  try { new Notification(judul, { body: isi, icon: '🛵' }); } catch(e) {}
+}
+
+// ══════════════════════════════════════════
+// CHAT
+// ══════════════════════════════════════════
+async function mulaiChat() {
+  await loadMsgs();
+  // Subscribe pesan baru
+  _msgSub = _sb.channel('room-msg-' + _rid)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_messages', filter: `room_id=eq.${_rid}` },
+      p => onNewMsg(p.new))
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'room_messages', filter: `room_id=eq.${_rid}` },
+      p => onUpdateMsg(p.new))
+    .subscribe();
+  // Subscribe live location
+  _locSub = _sb.channel('room-loc-' + _rid)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'room_locations', filter: `room_id=eq.${_rid}` },
+      p => { if (p.eventType === 'DELETE') hideLiveLoc(); else updateLiveLocUI(p.new); })
+    .subscribe();
+  // Cek apakah ada live loc aktif
+  loadLiveLoc();
+  tandaiDibaca();
+  // Update read receipt di UI setiap 4 detik
+  setInterval(refreshReadReceipts, 4000);
+}
+
+async function loadMsgs() {
+  const { data } = await _sb.from('room_messages').select('*').eq('room_id', _rid).order('created_at', { ascending: true });
+  const c = document.getElementById('msgs');
+  c.innerHTML = ''; _lastDate = '';
+  if (!data?.length) { c.innerHTML = '<div class="empty-chat"><div class="ico">💬</div><div>Belum ada pesan. Mulai chat!</div></div>'; return; }
+  data.forEach(m => renderMsg(m));
+  c.scrollTop = c.scrollHeight;
+}
+
+function onNewMsg(m) {
+  if (document.querySelector(`[data-id="${m.id}"]`)) return;
+  renderMsg(m);
+  document.getElementById('msgs').scrollTop = document.getElementById('msgs').scrollHeight;
+  if (m.sender_name !== _nama) {
+    kirimNotif(`Nitip Tuban — ${m.sender_name}`,
+      m.type === 'foto' ? '📷 Foto' : m.type === 'audio' ? '🎤 Pesan suara' : m.content);
+    tandaiDibaca();
+  }
+}
+
+function onUpdateMsg(m) {
+  // Update read receipt di UI
+  const el = document.querySelector(`[data-id="${m.id}"] .read-info`);
+  if (!el) return;
+  const rb = (m.read_by || []).filter(n => n !== m.sender_name);
+  el.textContent = rb.length ? `✓✓ Dilihat oleh ${rb.join(', ')}` : '';
+}
+
+function renderMsg(m) {
+  const c = document.getElementById('msgs');
+  c.querySelector('.empty-chat')?.remove();
+
+  const tgl = new Date(m.created_at).toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long' });
+  if (tgl !== _lastDate) {
+    _lastDate = tgl;
+    const sep = document.createElement('div');
+    sep.className = 'date-sep'; sep.textContent = tgl;
+    c.appendChild(sep);
+  }
+
+  const isMe = m.sender_name === _nama;
+  const isSys = m.type === 'system';
+  const cls = isSys ? 'sys' : isMe ? 'me' : 'other';
+  const d = document.createElement('div');
+  d.className = 'grp ' + cls; d.dataset.id = m.id;
+
+  let inner = '';
+  if (m.type === 'foto' && m.image_url) {
+    inner = `<div class="bub-img" onclick="bukaLightbox('${escAttr(m.image_url)}')"><img src="${escAttr(m.image_url)}" loading="lazy"></div>`;
+  } else if (m.type === 'audio' && m.image_url) {
+    inner = `<div class="bub bub-audio"><audio controls src="${escAttr(m.image_url)}"></audio></div>`;
+  } else if (m.type === 'lokasi_live') {
+    // Pesan lokasi live — 1 bubble, update in-place
+    _locMsgId = m.id;
+    const mapId = 'locmap-' + m.id;
+    const isActive = m.content === 'live';
+    inner = `<div class="bub-loc" onclick="bukaGmaps('${m.id}')">
+      <div class="loc-map" id="${mapId}"></div>
+      <div class="loc-footer">
+        <span class="loc-name">${isMe ? 'Lokasi kamu' : '📍 ' + escHtml(m.sender_name)}</span>
+        <span class="${isActive ? 'loc-live' : 'loc-ts'}">${isActive ? '● LIVE' : 'Berhenti'}</span>
+      </div>
+    </div>`;
+  } else {
+    inner = `<div class="bub">${escHtml(m.content)}</div>`;
+  }
+
+  const rb = (m.read_by || []).filter(n => n !== m.sender_name);
+  const readTxt = rb.length ? `✓✓ Dilihat oleh ${rb.join(', ')}` : '';
+  const ts = new Date(m.created_at).toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
+
+  d.innerHTML = (!isMe && !isSys ? `<div class="sender">${escHtml(m.sender_name)}</div>` : '') +
+    inner + `<div class="ts-row"><span class="ts">${ts}</span>${readTxt ? `<span class="read-info">${escHtml(readTxt)}</span>` : ''}</div>`;
+  c.appendChild(d);
+
+  if (m.type === 'lokasi_live') setTimeout(() => initMiniMap(m.id, m.lat, m.lng), 80);
+}
+
+// ══════════════════════════════════════════
+// LIVE LOCATION — 1 baris di room_locations
+// ══════════════════════════════════════════
+async function loadLiveLoc() {
+  const { data } = await _sb.from('room_locations').select('*').eq('room_id', _rid).single();
+  if (data) updateLiveLocUI(data);
+}
+
+function updateLiveLocUI(loc) {
+  // Update mini-map pada pesan lokasi_live yang ada
+  if (_locMsgId) {
+    const mapEl = document.getElementById('locmap-' + _locMsgId);
+    if (mapEl) {
+      if (!_miniMaps[_locMsgId]) {
+        initMiniMap(_locMsgId, loc.lat, loc.lng);
+      } else {
+        _miniMaps[_locMsgId].marker?.setLatLng([loc.lat, loc.lng]);
+        _miniMaps[_locMsgId].map?.panTo([loc.lat, loc.lng]);
+      }
+    }
+  }
+  // Update footer peta semua loc bubble
+  document.querySelectorAll('[data-locid]').forEach(el => {
+    const footer = el.querySelector('.loc-live');
+    if (footer) footer.textContent = '● LIVE';
+  });
+  // Simpan acc untuk banner
+  const ts = new Date(loc.updated_at).toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  document.getElementById('live-acc').textContent = `diperbarui ${ts}`;
+}
+
+function hideLiveLoc() {
+  // Update status bubble lokasi jadi "Berhenti"
+  document.querySelectorAll('.loc-live').forEach(el => {
+    el.className = 'loc-ts'; el.textContent = 'Berhenti';
+  });
+}
+
+function initMiniMap(msgId, lat, lng) {
+  const el = document.getElementById('locmap-' + msgId);
+  if (!el || _miniMaps[msgId]) return;
+  const map = L.map(el, { zoomControl:false, attributionControl:false, dragging:false, scrollWheelZoom:false });
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(map);
+  const marker = L.circleMarker([lat||0, lng||0], { radius:8, color:'#0a7a72', fillColor:'#2ABFB3', fillOpacity:1, weight:2 }).addTo(map);
+  if (lat && lng) map.setView([lat, lng], 15);
+  _miniMaps[msgId] = { map, marker };
+}
+
+// ══════════════════════════════════════════
+// TOGGLE LIVE LOCATION
+// ══════════════════════════════════════════
+function toggleLiveLoc() { _liveOn ? stopLiveLoc() : startLiveLoc(); }
+
+function startLiveLoc() {
+  if (!navigator.geolocation) { alert('GPS tidak didukung browser ini.'); return; }
+  _liveOn = true;
+  document.getElementById('btn-loc').classList.add('active');
+  document.getElementById('live-bar').classList.add('on');
+
+  // Kirim 1 pesan lokasi_live
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const { latitude: lat, longitude: lng } = pos.coords;
+    const { data: msg } = await _sb.from('room_messages').insert({
+      room_id: _rid, sender_name: _nama,
+      content: 'live', type: 'lokasi_live', lat, lng
+    }).select().single();
+    if (msg) _locMsgId = msg.id;
+
+    // Upsert ke room_locations
+    await _sb.from('room_locations').upsert(
+      { room_id: _rid, sender_name: _nama, lat, lng, updated_at: new Date().toISOString() },
+      { onConflict: 'room_id' }
+    );
+
+    // Update posisi di background
+    _gpsWatch = navigator.geolocation.watchPosition(async p2 => {
+      const lt = p2.coords.latitude, ln = p2.coords.longitude;
+      // Update room_locations saja (bukan insert pesan baru)
+      await _sb.from('room_locations').upsert(
+        { room_id: _rid, sender_name: _nama, lat: lt, lng: ln, updated_at: new Date().toISOString() },
+        { onConflict: 'room_id' }
+      );
+      // Update marker lokal
+      if (_locMsgId && _miniMaps[_locMsgId]) {
+        _miniMaps[_locMsgId].marker?.setLatLng([lt, ln]);
+        _miniMaps[_locMsgId].map?.panTo([lt, ln]);
+      }
+      document.getElementById('live-acc').textContent = '±' + Math.round(p2.coords.accuracy) + 'm';
+    }, err => { stopLiveLoc(); }, { enableHighAccuracy:true, maximumAge:5000, timeout:15000 });
+  }, err => { alert('Gagal ambil lokasi: ' + err.message); _liveOn=false; });
+}
+
+async function stopLiveLoc() {
+  if (_gpsWatch != null) { navigator.geolocation.clearWatch(_gpsWatch); _gpsWatch=null; }
+  _liveOn = false;
+  document.getElementById('btn-loc').classList.remove('active');
+  document.getElementById('live-bar').classList.remove('on');
+  // Hapus dari room_locations
+  await _sb.from('room_locations').delete().eq('room_id', _rid);
+  // Update pesan jadi "stopped"
+  if (_locMsgId) {
+    await _sb.from('room_messages').update({ content: 'stopped' }).eq('id', _locMsgId);
+    _locMsgId = null;
+  }
+}
+
+function bukaGmaps(msgId) {
+  const m = _miniMaps[msgId];
+  if (!m) return;
+  const c = m.marker?.getLatLng();
+  if (c) window.open(`https://www.google.com/maps?q=${c.lat},${c.lng}`, '_blank');
+}
+
+window.addEventListener('beforeunload', () => { if (_liveOn) stopLiveLoc(); });
+
+// ══════════════════════════════════════════
+// KIRIM TEKS
+// ══════════════════════════════════════════
+async function kirimTeks() {
+  const el = document.getElementById('inp'), t = el.value.trim();
+  if (!t || !_nama) return;
+  el.value = ''; resize(el);
+  await _sb.from('room_messages').insert({ room_id: _rid, sender_name: _nama, content: t, type: 'text' });
+}
+
+// ══════════════════════════════════════════
+// KIRIM FOTO
+// ══════════════════════════════════════════
+async function kirimFoto(input) {
+  const file = input.files[0];
+  if (!file || !_nama) return; input.value = '';
+  const path = `${_rid}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g,'_')}`;
+  const { error } = await _sb.storage.from('room-photos').upload(path, file, { upsert:true });
+  if (error) { alert('Gagal upload: ' + error.message); return; }
+  const { data: u } = _sb.storage.from('room-photos').getPublicUrl(path);
+  await _sb.from('room_messages').insert({ room_id:_rid, sender_name:_nama, content:'📷 Foto', image_url:u.publicUrl, type:'foto' });
+}
+
+// ══════════════════════════════════════════
+// PESAN SUARA — klik mic = mulai/stop rekam, klik send = kirim
+// ══════════════════════════════════════════
+let _recStream = null, _recBlob = null;
+
+function toggleRekam() {
+  if (_mediaRec?.state === 'recording') {
+    // Stop rekam, simpan blob, tunggu user klik send
+    _mediaRec.stop();
+  } else {
+    mulaiRekam();
+  }
+}
+
+async function mulaiRekam() {
+  if (!navigator.mediaDevices) { alert('Perekam tidak didukung browser ini.'); return; }
+  try {
+    _recStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    _recChunks = []; _recBlob = null;
+    _mediaRec = new MediaRecorder(_recStream, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg' });
+    _mediaRec.ondataavailable = e => { if (e.data.size > 0) _recChunks.push(e.data); };
+    _mediaRec.onstop = () => {
+      _recStream.getTracks().forEach(t => t.stop());
+      _recBlob = new Blob(_recChunks, { type: _mediaRec.mimeType });
+      // Update UI: mic jadi ✅ siap kirim, send button glow
+      document.getElementById('btn-mic').textContent = '✅';
+      document.getElementById('btn-mic').classList.remove('rec');
+      document.getElementById('btn-mic').classList.add('active');
+      document.getElementById('rec-ind').classList.remove('on');
+      clearInterval(_recTimer); _recTimer = null;
+      // Update placeholder
+      document.getElementById('inp').placeholder = '🎤 Rekaman siap — klik Kirim untuk mengirim';
+    };
+    _mediaRec.start();
+    _recSec = 0; _recBlob = null;
+    document.getElementById('rec-ind').classList.add('on');
+    document.getElementById('btn-mic').classList.add('rec');
+    document.getElementById('btn-mic').textContent = '⏹️';
+    document.getElementById('inp').placeholder = '🎤 Merekam… klik ⏹️ untuk stop';
+    _recTimer = setInterval(() => {
+      _recSec++;
+      const m = Math.floor(_recSec/60), s = _recSec%60;
+      document.getElementById('rec-timer').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+    }, 1000);
+  } catch(e) { alert('Tidak bisa akses mikrofon: ' + e.message); }
+}
+
+async function kirimSuara() {
+  if (!_recBlob || _recBlob.size < 500) { batalRekam(); return; }
+  const ext = _mediaRec.mimeType.includes('webm') ? 'webm' : 'ogg';
+  const path = `${_rid}/audio-${Date.now()}.${ext}`;
+  const { error } = await _sb.storage.from('room-photos').upload(path, _recBlob, { contentType: _mediaRec.mimeType, upsert:true });
+  if (error) { alert('Gagal upload suara: ' + error.message); return; }
+  const { data: u } = _sb.storage.from('room-photos').getPublicUrl(path);
+  await _sb.from('room_messages').insert({ room_id:_rid, sender_name:_nama, content:'🎤 Pesan suara', image_url:u.publicUrl, type:'audio' });
+  batalRekam();
+}
+
+async function kirimAtauKirimSuara() {
+  if (_recBlob) { await kirimSuara(); }
+  else { await kirimTeks(); }
+}
+
+function batalRekam() {
+  if (_mediaRec?.state === 'recording') {
+    _mediaRec.ondataavailable = null; _mediaRec.onstop = null;
+    _mediaRec.stop();
+  }
+  if (_recStream) { _recStream.getTracks().forEach(t => t.stop()); _recStream = null; }
+  clearInterval(_recTimer); _recTimer = null; _recSec = 0; _recBlob = null;
+  document.getElementById('rec-ind').classList.remove('on');
+  document.getElementById('btn-mic').classList.remove('rec','active');
+  document.getElementById('btn-mic').textContent = '🎤';
+  document.getElementById('rec-timer').textContent = '0:00';
+  document.getElementById('inp').placeholder = 'Ketik pesan…';
+}
+
+// ══════════════════════════════════════════
+// READ RECEIPTS
+// ══════════════════════════════════════════
+async function tandaiDibaca() {
+  if (!_nama) return;
+  const { data } = await _sb.from('room_messages').select('id,read_by,sender_name').eq('room_id', _rid);
+  if (!data) return;
+  for (const m of data) {
+    if (m.sender_name === _nama) continue;
+    const rb = m.read_by || [];
+    if (!rb.includes(_nama)) {
+      await _sb.from('room_messages').update({ read_by: [...rb, _nama] }).eq('id', m.id);
+    }
+  }
+}
+
+// ══════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════
+function bukaLightbox(url) { document.getElementById('lb-img').src = url; document.getElementById('lightbox').classList.add('on'); }
+function tutupLightbox() { document.getElementById('lightbox').classList.remove('on'); }
+function hideModal(id) { document.getElementById(id).classList.add('hide'); }
+function onKey(e) { if (e.key==='Enter'&&!e.shiftKey) { e.preventDefault(); kirimTeks(); } }
+function resize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,100)+'px'; }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
+function escAttr(s) { return String(s).replace(/"/g,'&quot;'); }
+
+async function refreshReadReceipts() {
+  if (!_nama || !_rid) return;
+  const { data } = await _sb.from('room_messages').select('id,read_by,sender_name').eq('room_id', _rid);
+  if (!data) return;
+  data.forEach(m => {
+    const grp = document.querySelector(`[data-id="${m.id}"]`);
+    if (!grp) return;
+    const rb = (m.read_by || []).filter(n => n !== m.sender_name);
+    const el = grp.querySelector('.read-info');
+    const newTxt = rb.length ? `✓✓ Dilihat oleh ${rb.join(', ')}` : '';
+    if (el) { el.textContent = newTxt; }
+    else if (newTxt) {
+      const tsRow = grp.querySelector('.ts-row');
+      if (tsRow) {
+        const span = document.createElement('span');
+        span.className = 'read-info';
+        span.textContent = newTxt;
+        tsRow.appendChild(span);
+      }
+    }
+  });
+}
+
+init();
+</script>
+</body>
+</html>
